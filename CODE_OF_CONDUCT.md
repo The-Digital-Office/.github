@@ -11,7 +11,6 @@ requests, discussions or any other project space.
 ## Reporting
 
 If you experience or witness unacceptable behaviour, report it privately to
-<!-- TODO: replace with the Digital Office conduct contact address -->
 **info@digitaloffice.scot**. Do not report conduct issues in a public issue.
 
 Reports are handled by the organisation owners, will be reviewed promptly and
