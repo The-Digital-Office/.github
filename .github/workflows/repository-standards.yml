@@ -1,0 +1,164 @@
+name: Repository standards
+
+# Reusable workflow implementing The Digital Office repository baseline.
+# See GOVERNANCE.md in this repository for the policy it enforces.
+#
+# Call it from any repository in the organisation:
+#
+#   jobs:
+#     standards:
+#       uses: The-Digital-Office/.github/.github/workflows/repository-standards.yml@v1
+#
+# It reports two checks, which the branch ruleset requires:
+#   "standards / Required files"
+#   "standards / publiccode.yml"
+#
+# Both jobs always run and always report, so a required check is never left
+# waiting. When publiccode.yml does not apply, that job passes with a notice.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  files:
+    name: Required files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check required files are present
+        shell: bash
+        run: |
+          missing=0
+          {
+            echo "### Required files"
+            echo
+            echo "| File | Result |"
+            echo "|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # check <label> <candidate paths...>
+          check() {
+            local label=$1; shift
+            local path
+            for path in "$@"; do
+              if [[ -s $path ]]; then
+                echo "| $label | found \`$path\` |" >> "$GITHUB_STEP_SUMMARY"
+                return
+              fi
+            done
+            echo "::error title=Missing $label::$label is required by the Digital Office repository baseline. Looked for: $*"
+            echo "| $label | **missing** |" >> "$GITHUB_STEP_SUMMARY"
+            missing=1
+          }
+
+          check README README.md README.rst README
+          check LICENSE LICENSE LICENSE.md LICENSE.txt
+          check CODEOWNERS CODEOWNERS .github/CODEOWNERS docs/CODEOWNERS
+          check CHANGELOG CHANGELOG.md
+
+          {
+            echo
+            echo "SECURITY, CONTRIBUTING, CODE_OF_CONDUCT and SUPPORT are provided"
+            echo "organisation-wide by [The-Digital-Office/.github](https://github.com/The-Digital-Office/.github)"
+            echo "and are not required in each repository."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$missing"
+
+  publiccode:
+    name: publiccode.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Decide whether publiccode.yml applies
+        id: scope
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Read live repository metadata, so topic or visibility changes made
+          # since the triggering event are respected.
+          meta=$(gh api "repos/$GITHUB_REPOSITORY" \
+            --jq '[.visibility, (.is_template|tostring), .name, (.topics|join(" "))] | @tsv')
+          IFS=$'\t' read -r visibility is_template name topics <<< "$meta"
+
+          reason=""
+          if [[ $is_template == "true" ]]; then
+            reason="this is a template repository"
+          elif [[ $name == ".github" ]]; then
+            reason="this is the organisation .github repository"
+          elif [[ $visibility != "public" ]]; then
+            reason="the repository is $visibility; publiccode.yml applies to public repositories only"
+          elif [[ " $topics " == *" documentation "* ]]; then
+            reason="the repository has the 'documentation' topic; publiccode.yml applies to software only"
+          elif [[ -f .github/template/setup.sh ]]; then
+            reason="template setup has not run yet"
+          fi
+
+          if [[ -n $reason ]]; then
+            echo "::notice title=publiccode.yml not required::Skipped because $reason."
+            echo "publiccode.yml check skipped: $reason." >> "$GITHUB_STEP_SUMMARY"
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "required=true" >> "$GITHUB_OUTPUT"
+          if [[ ! -f publiccode.yml ]]; then
+            echo "::error title=Missing publiccode.yml::Public software repositories must include a publiccode.yml at the repository root. Copy it from https://github.com/The-Digital-Office/repository-template, or add the 'documentation' topic if this repository is not software."
+            exit 1
+          fi
+
+      - name: Validate against the publiccode.yml standard
+        if: steps.scope.outputs.required == 'true'
+        uses: italia/publiccode-parser-action@0deab88c3f094aa12c5826e52ac2c4f176446821 # v1.6.0
+        with:
+          publiccode: publiccode.yml
+
+      - name: Check url points to this repository
+        if: steps.scope.outputs.required == 'true'
+        shell: bash
+        run: |
+          url=$(yq -r '.url' publiccode.yml)
+          expected="https://github.com/$GITHUB_REPOSITORY"
+          normalised=${url%/}
+          normalised=${normalised%.git}
+          if [[ ${normalised,,} != "${expected,,}" ]]; then
+            echo "::error file=publiccode.yml,title=Wrong url::url is '$url' but this repository is $expected. Copied files must point at their own repository."
+            exit 1
+          fi
+
+      - name: Check for unfinished placeholders
+        if: steps.scope.outputs.required == 'true'
+        shell: bash
+        run: |
+          # Values still starting with TODO are placeholders from the template.
+          # They are warnings until the first release tag, then errors.
+          todos=$(yq -r '.. | select(tag == "!!str") | select(test("^TODO"))' publiccode.yml)
+          if [[ -z $todos ]]; then
+            echo "No placeholders left in publiccode.yml." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          count=$(grep -c . <<< "$todos")
+          {
+            echo "### publiccode.yml placeholders still to complete ($count)"
+            echo
+            while IFS= read -r line; do echo "- $line"; done <<< "$todos"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if git ls-remote --tags --exit-code "https://github.com/$GITHUB_REPOSITORY" > /dev/null; then
+            echo "::error file=publiccode.yml,title=Unfinished publiccode.yml::$count placeholder value(s) starting with TODO remain, and this repository has been released. Complete them before merging."
+            exit 1
+          fi
+          echo "::warning file=publiccode.yml,title=Unfinished publiccode.yml::$count placeholder value(s) starting with TODO remain. This becomes an error once the repository has a release tag."

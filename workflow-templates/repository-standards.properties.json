@@ -1,0 +1,6 @@
+{
+  "name": "Digital Office repository standards",
+  "description": "Checks required files and validates publiccode.yml, as required by the Digital Office repository baseline.",
+  "iconName": "octicon checklist",
+  "categories": ["Continuous integration"]
+}

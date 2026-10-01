@@ -1,0 +1,14 @@
+name: Repository standards
+
+on:
+  pull_request:
+  push:
+    branches: [$default-branch]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standards:
+    uses: The-Digital-Office/.github/.github/workflows/repository-standards.yml@v1
