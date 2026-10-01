@@ -44,6 +44,8 @@ done
 
 say() { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
+# result <message>: report what a step did, or would do in dry-run mode.
+result() { if $dry_run; then say "Would apply: $*"; else say "$*"; fi; }
 
 # api <method> <path> [gh api args...]: call the API, or print it in dry-run mode.
 api() {
@@ -58,6 +60,7 @@ api() {
 info=$(gh api "repos/$repo") || { echo "error: cannot read $repo (check the name and your access)" >&2; exit 1; }
 visibility=$(jq -r .visibility <<< "$info")
 default_branch=$(jq -r .default_branch <<< "$info")
+is_template=$(jq -r .is_template <<< "$info")
 is_public=false
 [[ $visibility == "public" ]] && is_public=true
 
@@ -80,12 +83,12 @@ api PATCH "repos/$repo" --silent \
   -f squash_merge_commit_message=PR_BODY \
   -F has_wiki=false \
   -F has_projects=false
-say "Squash merge only; head branches deleted after merge; wiki and projects off."
+result "Squash merge only; head branches deleted after merge; wiki and projects off."
 
 step "Dependabot"
 api PUT "repos/$repo/vulnerability-alerts" --silent
 api PUT "repos/$repo/automated-security-fixes" --silent
-say "Dependabot alerts and security updates enabled."
+result "Dependabot alerts and security updates on."
 
 step "Secret scanning and private vulnerability reporting"
 if $is_public; then
@@ -98,7 +101,7 @@ if $is_public; then
 }
 JSON
   api PUT "repos/$repo/private-vulnerability-reporting" --silent
-  say "Secret scanning with push protection, and private vulnerability reporting, enabled."
+  result "Secret scanning with push protection, and private vulnerability reporting, on."
 else
   say "Skipped: not available for private repositories on the GitHub Free plan."
 fi
@@ -143,10 +146,10 @@ if $is_public; then
   existing=$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == \"$RULESET_NAME\") | .id" || true)
   if [[ -n $existing ]]; then
     api PUT "repos/$repo/rulesets/$existing" --silent --input - <<< "$ruleset"
-    say "Updated existing ruleset (id $existing)."
+    result "Existing ruleset '$RULESET_NAME' (id $existing) brought up to date."
   else
     api POST "repos/$repo/rulesets" --silent --input - <<< "$ruleset"
-    say "Created ruleset '$RULESET_NAME'."
+    result "New ruleset '$RULESET_NAME'."
   fi
 else
   say "Skipped: branch rulesets are not available for private repositories on the GitHub Free plan."
@@ -173,10 +176,12 @@ for entry in "${labels[@]}"; do
     gh label create "$name" --repo "$repo" --color "$colour" --description "$description" --force > /dev/null
   fi
 done
-say "Standard labels in place."
+result "Standard labels."
 
 step "Done"
-if $is_public; then
+# The organisation .github repository and templates are exempt from
+# publiccode.yml, so the reminder only applies to other public repositories.
+if $is_public && [[ $is_template != "true" && ${repo#*/} != ".github" ]]; then
   say "Reminder: if this public repository is documentation rather than software,"
   say "add the 'documentation' topic so publiccode.yml is not required:"
   say "  gh repo edit $repo --add-topic documentation"
