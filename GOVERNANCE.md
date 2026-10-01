@@ -95,6 +95,11 @@ cannot push directly to `main`.
    scripts/apply-baseline.sh <repository-name>
    ```
 
+   On Windows, run it in Git Bash, which is installed with
+   [Git for Windows](https://gitforwindows.org/). It needs the
+   [GitHub CLI](https://cli.github.com/) (signed in with `gh auth login`) and
+   [jq](https://jqlang.org/).
+
 4. Work through the setup issue and close it.
 
 ## Changing the baseline
