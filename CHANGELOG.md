@@ -3,6 +3,22 @@
 All notable changes to this repository are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [1.0.1] - 2026-10-01
+
+### Changed
+
+- Shared workflow now uses `actions/checkout` v7 (was v5).
+- `apply-baseline.sh` dry runs now say what would be applied, and the
+  `documentation` topic reminder is no longer shown for `.github` or template
+  repositories.
+
+### Added
+
+- `.gitattributes` so shell scripts always check out with LF line endings,
+  which lets them run in Git Bash on Windows.
+
 ## [1.0.0] - 2026-10-01
 
 ### Added
