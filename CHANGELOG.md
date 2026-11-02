@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-02
+
+### Changed
+
+- Shared workflow now uses `italia/publiccode-parser-action` v1.7.0 (was v1.6.0), which adds support for publiccode.yml v0.8.
+
 ## [1.0.1] - 2026-10-01
 
 ### Changed
